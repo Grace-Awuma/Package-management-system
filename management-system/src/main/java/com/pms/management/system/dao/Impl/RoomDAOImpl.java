@@ -2,12 +2,11 @@ package com.pms.management.system.dao.Impl;
 
 import com.pms.management.system.dao.RoomDAO;
 import com.pms.management.system.model.Room;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
-import jakarta.persistence.Query;
-import jakarta.persistence.TypedQuery;
+import org.hibernate.Session;
+import org.hibernate.SessionFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -17,36 +16,46 @@ public class RoomDAOImpl implements RoomDAO {
     
     private static final Logger logger = LoggerFactory.getLogger(RoomDAOImpl.class);
     
-    @PersistenceContext
-    private EntityManager entityManager;
+    @Autowired
+    private SessionFactory sessionFactory;
+    
+    private Session getCurrentSession() {
+        return sessionFactory.getCurrentSession();
+    }
     
     @Override
     public List<Room> getAllRooms() {
-        return entityManager.createQuery("from Room", Room.class).getResultList();
+        return getCurrentSession()
+            .createQuery("FROM Room", Room.class)
+            .getResultList();
     }
     
     @Override
     public Room getRoomById(Long id) {
-        return entityManager.find(Room.class, id);
+        return getCurrentSession().get(Room.class, id);
     }
     
     @Override
     public Room getRoomByRoomNumber(String roomNumber) {
-        TypedQuery<Room> query = entityManager.createQuery(
-            "from Room where roomNumber = :roomNumber", Room.class);
-        query.setParameter("roomNumber", roomNumber);
-        List<Room> results = query.getResultList();
-        return results.isEmpty() ? null : results.get(0);
+        try {
+            return getCurrentSession()
+                .createQuery("FROM Room WHERE roomNumber = :roomNumber", Room.class)
+                .setParameter("roomNumber", roomNumber)
+                .getSingleResult();
+        } catch (Exception e) {
+            logger.debug("No room found with number: {}", roomNumber);
+            return null;
+        }
     }
     
     @Override
     public void saveRoom(Room room) {
         try {
             if (room.getId() == null) {
-                entityManager.persist(room);
+                getCurrentSession().persist(room);
                 logger.info("Room saved successfully");
             } else {
-                entityManager.merge(room);
+                getCurrentSession().merge(room);
                 logger.info("Room updated successfully");
             }
         } catch (Exception e) {
@@ -59,22 +68,24 @@ public class RoomDAOImpl implements RoomDAO {
     public void deleteRoom(Long id) {
         Room room = getRoomById(id);
         if (room != null) {
-            entityManager.remove(room);
+            getCurrentSession().remove(room);
             logger.info("Room deleted successfully");
         }
     }
     
     @Override
     public boolean roomExists(String roomNumber) {
-        TypedQuery<Long> query = entityManager.createQuery(
-            "select count(r) from Room r where r.roomNumber = :roomNumber", Long.class);
-        query.setParameter("roomNumber", roomNumber);
-        return query.getSingleResult() > 0;
+        Long count = getCurrentSession()
+            .createQuery("SELECT COUNT(r) FROM Room r WHERE r.roomNumber = :roomNumber", Long.class)
+            .setParameter("roomNumber", roomNumber)
+            .getSingleResult();
+        return count > 0;
     }
     
     @Override
     public Long getRoomCount() {
-        Query query = entityManager.createQuery("SELECT COUNT(r) FROM Room r");
-        return (Long) query.getSingleResult();
+        return getCurrentSession()
+            .createQuery("SELECT COUNT(r) FROM Room r", Long.class)
+            .getSingleResult();
     }
 }
